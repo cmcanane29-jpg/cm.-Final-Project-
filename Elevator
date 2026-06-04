@@ -1,0 +1,250 @@
+Imports System.Drawing
+Imports System.Linq
+
+Public Class Form1
+
+    ' --- ALTITUDE COORDINATES ---
+    Dim Level4_Alt As Integer = 13
+    Dim Level3_Alt As Integer = 197
+    Dim Level2_Alt As Integer = 367
+    Dim Level1_Alt As Integer = 549
+
+    ' --- LIFT BRAIN ---
+    Dim ActiveRequests As New List(Of Integer)
+    Dim ElevatorMode As String = "STANDING"
+
+    Dim TargetAltitude As Integer = 0
+    Dim Velocity As Integer = 5
+    Dim MaxDoorSpan As Integer
+
+    ' ================= FORM LOAD =================
+    Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+
+        tmrPassengerWait.Interval = 3000
+        InitializeSensors(Me)
+
+        pnlElevatorCab.Top = Level1_Alt
+
+        If pnlLeftDoor IsNot Nothing Then
+            MaxDoorSpan = pnlLeftDoor.Width
+        End If
+
+        UpdateScreens("1")
+
+        StyleButton(btnFloor1)
+        StyleButton(btnFloor2)
+        StyleButton(btnFloor3)
+        StyleButton(btnFloor4)
+
+        StyleButton(btnDoorOpen)
+        StyleButton(btnDoorClose)
+
+    End Sub
+
+    ' ================= STYLE =================
+    Private Sub StyleButton(btn As Button)
+
+        btn.BackColor = Color.DodgerBlue
+        btn.ForeColor = Color.White
+        btn.FlatStyle = FlatStyle.Flat
+        btn.FlatAppearance.BorderSize = 0
+        btn.Font = New Font("Segoe UI", 10, FontStyle.Bold)
+
+    End Sub
+
+    ' ================= SENSOR INIT =================
+    Private Sub InitializeSensors(parent As Control)
+
+        For Each item As Control In parent.Controls
+            If TypeOf item Is Button Then
+                AddHandler DirectCast(item, Button).Click, AddressOf ProcessButtonPress
+            ElseIf item.HasChildren Then
+                InitializeSensors(item)
+            End If
+        Next
+
+    End Sub
+
+    ' ================= INPUT =================
+    Private Sub ProcessButtonPress(sender As Object, e As EventArgs)
+
+        Dim pressedBtn = DirectCast(sender, Button)
+        Dim destinationY As Integer = -1
+        Dim callOriginY As Integer = -1
+
+        If pressedBtn.Name = "btnDoorOpen" Then
+            If ElevatorMode = "STANDING" Then
+                tmrDoorControl.Tag = "OPEN"
+                tmrDoorControl.Start()
+            End If
+            Return
+        ElseIf pressedBtn.Name = "btnDoorClose" Then
+            If ElevatorMode = "STANDING" AndAlso pnlLeftDoor.Width < MaxDoorSpan Then
+                tmrDoorControl.Tag = "LOCK"
+                tmrDoorControl.Start()
+            End If
+            Return
+        End If
+
+        If pressedBtn.Parent.Name = "pnlElevatorCab" Then
+            If pressedBtn.Text.Contains("1") Then destinationY = Level1_Alt
+            If pressedBtn.Text.Contains("2") Then destinationY = Level2_Alt
+            If pressedBtn.Text.Contains("3") Then destinationY = Level3_Alt
+            If pressedBtn.Text.Contains("4") Then destinationY = Level4_Alt
+        End If
+
+        If pressedBtn.Parent.Name <> "pnlElevatorCab" Then
+            If pressedBtn.Top < Level3_Alt Then
+                callOriginY = Level4_Alt
+            ElseIf pressedBtn.Top < Level2_Alt Then
+                callOriginY = Level3_Alt
+            ElseIf pressedBtn.Top < Level1_Alt Then
+                callOriginY = Level2_Alt
+            Else
+                callOriginY = Level1_Alt
+            End If
+        End If
+
+        If callOriginY <> -1 AndAlso Not ActiveRequests.Contains(callOriginY) Then
+            ActiveRequests.Add(callOriginY)
+        End If
+
+        If destinationY <> -1 AndAlso Not ActiveRequests.Contains(destinationY) Then
+            ActiveRequests.Add(destinationY)
+        End If
+
+        If ElevatorMode = "STANDING" AndAlso ActiveRequests.Count > 0 Then
+            ComputeNextStop()
+            tmrDoorControl.Tag = "LOCK"
+            tmrDoorControl.Start()
+        End If
+
+    End Sub
+
+    ' ================= ELEVATOR LOGIC =================
+    Private Sub ComputeNextStop()
+
+        If ActiveRequests.Count = 0 Then
+            ElevatorMode = "STANDING"
+            Return
+        End If
+
+        Dim currentPos = pnlElevatorCab.Top
+
+        TargetAltitude = ActiveRequests.OrderBy(Function(x) Math.Abs(x - currentPos)).First()
+
+        If TargetAltitude < currentPos Then
+            ElevatorMode = "CLIMBING"
+        ElseIf TargetAltitude > currentPos Then
+            ElevatorMode = "DROPPING"
+        End If
+
+    End Sub
+
+    ' ================= MOVEMENT =================
+    Private Sub tmrLift_Tick(sender As Object, e As EventArgs) Handles tmrLift.Tick
+
+        If ElevatorMode = "CLIMBING" Then
+
+            pnlElevatorCab.Top -= Velocity
+
+            If pnlElevatorCab.Top <= TargetAltitude Then
+                pnlElevatorCab.Top = TargetAltitude
+                ArriveAtFloor()
+            End If
+
+        ElseIf ElevatorMode = "DROPPING" Then
+
+            pnlElevatorCab.Top += Velocity
+
+            If pnlElevatorCab.Top >= TargetAltitude Then
+                pnlElevatorCab.Top = TargetAltitude
+                ArriveAtFloor()
+            End If
+
+        End If
+
+    End Sub
+
+    ' ================= ARRIVAL =================
+    Private Sub ArriveAtFloor()
+
+        tmrLift.Stop()
+
+        If ActiveRequests.Contains(TargetAltitude) Then
+            ActiveRequests.Remove(TargetAltitude)
+        End If
+
+        If TargetAltitude = Level1_Alt Then UpdateScreens("1")
+        If TargetAltitude = Level2_Alt Then UpdateScreens("2")
+        If TargetAltitude = Level3_Alt Then UpdateScreens("3")
+        If TargetAltitude = Level4_Alt Then UpdateScreens("4")
+
+        tmrDoorControl.Tag = "OPEN"
+        tmrDoorControl.Start()
+
+    End Sub
+
+    ' ================= DOOR CONTROL =================
+    Private Sub tmrDoorControl_Tick(sender As Object, e As EventArgs) Handles tmrDoorControl.Tick
+
+        If tmrDoorControl.Tag = "OPEN" Then
+
+            If pnlLeftDoor.Width > 0 Then
+                pnlLeftDoor.Width -= 2
+            End If
+
+            If pnlRightDoor IsNot Nothing Then
+                If pnlRightDoor.Width > 0 Then pnlRightDoor.Width -= 2
+            End If
+
+            If pnlLeftDoor.Width = 0 Then
+                tmrDoorControl.Stop()
+                tmrPassengerWait.Start()
+            End If
+
+        ElseIf tmrDoorControl.Tag = "LOCK" Then
+
+            If pnlLeftDoor.Width < MaxDoorSpan Then
+                pnlLeftDoor.Width += 2
+            End If
+
+            If pnlRightDoor IsNot Nothing Then
+                If pnlRightDoor.Width < MaxDoorSpan Then pnlRightDoor.Width += 2
+            End If
+
+            If pnlLeftDoor.Width >= MaxDoorSpan Then
+                tmrDoorControl.Stop()
+
+                If ActiveRequests.Count > 0 Then
+                    ComputeNextStop()
+                    tmrLift.Start()
+                Else
+                    ElevatorMode = "STANDING"
+                End If
+            End If
+
+        End If
+
+    End Sub
+
+    ' ================= WAIT =================
+    Private Sub tmrPassengerWait_Tick(sender As Object, e As EventArgs) Handles tmrPassengerWait.Tick
+
+        tmrPassengerWait.Stop()
+
+        tmrDoorControl.Tag = "LOCK"
+        tmrDoorControl.Start()
+
+    End Sub
+
+    ' ================= DISPLAY =================
+    Private Sub UpdateScreens(floorText As String)
+
+        If lblFloorDisplay IsNot Nothing Then
+            lblFloorDisplay.Text = floorText
+        End If
+
+    End Sub
+
+End Class
