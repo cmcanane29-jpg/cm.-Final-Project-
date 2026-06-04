@@ -1,0 +1,144 @@
+Imports System.Drawing
+
+Public Class Form1
+
+    Dim bullets As New List(Of PictureBox)
+    Dim enemies As New List(Of PictureBox)
+    Dim score As Integer = 0
+    Dim rnd As New Random()
+
+    Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+
+        Me.KeyPreview = True
+
+        picPlayer.BackColor = Color.Blue
+        picPlayer.Width = 40
+        picPlayer.Height = 40
+        picPlayer.Top = Me.ClientSize.Height - 60
+        picPlayer.Left = Me.ClientSize.Width \ 2
+
+        lblScore.Text = "Score: 0"
+
+        SpawnEnemies()
+
+        tmrGame.Start()
+
+    End Sub
+
+    ' ================= MOVEMENT =================
+    Private Sub Form1_KeyDown(sender As Object, e As KeyEventArgs) Handles MyBase.KeyDown
+
+        If e.KeyCode = Keys.Left Then
+            picPlayer.Left -= 20
+        ElseIf e.KeyCode = Keys.Right Then
+            picPlayer.Left += 20
+        ElseIf e.KeyCode = Keys.Space Then
+            ShootBullet()
+        End If
+
+    End Sub
+
+    ' ================= SHOOT =================
+    Private Sub ShootBullet()
+
+        Dim bullet As New PictureBox
+        bullet.BackColor = Color.Red
+        bullet.Width = 5
+        bullet.Height = 15
+
+        bullet.Left = picPlayer.Left + (picPlayer.Width \ 2)
+        bullet.Top = picPlayer.Top
+
+        Me.Controls.Add(bullet)
+        bullets.Add(bullet)
+
+    End Sub
+
+    ' ================= ENEMIES =================
+    Private Sub SpawnEnemies()
+
+        For i As Integer = 0 To 5
+
+            Dim enemy As New PictureBox
+            enemy.BackColor = Color.Green
+            enemy.Width = 30
+            enemy.Height = 30
+
+            enemy.Top = rnd.Next(20, 200)
+            enemy.Left = rnd.Next(0, Me.ClientSize.Width - 30)
+
+            Me.Controls.Add(enemy)
+            enemies.Add(enemy)
+
+        Next
+
+    End Sub
+
+    ' ================= GAME LOOP =================
+    Private Sub tmrGame_Tick(sender As Object, e As EventArgs) Handles tmrGame.Tick
+
+        MoveBullets()
+        MoveEnemies()
+        CheckCollisions()
+
+    End Sub
+
+    ' ================= BULLETS =================
+    Private Sub MoveBullets()
+
+        For i = bullets.Count - 1 To 0 Step -1
+
+            bullets(i).Top -= 10
+
+            If bullets(i).Top < 0 Then
+                Me.Controls.Remove(bullets(i))
+                bullets.RemoveAt(i)
+            End If
+
+        Next
+
+    End Sub
+
+    ' ================= ENEMY MOVEMENT =================
+    Private Sub MoveEnemies()
+
+        For Each enemy In enemies
+            enemy.Top += 2
+
+            If enemy.Top > Me.Height Then
+                enemy.Top = 0
+                enemy.Left = rnd.Next(0, Me.Width)
+            End If
+        Next
+
+    End Sub
+
+    ' ================= COLLISION =================
+    Private Sub CheckCollisions()
+
+        For i = bullets.Count - 1 To 0 Step -1
+
+            For j = enemies.Count - 1 To 0 Step -1
+
+                If bullets(i).Bounds.IntersectsWith(enemies(j).Bounds) Then
+
+                    Me.Controls.Remove(bullets(i))
+                    Me.Controls.Remove(enemies(j))
+
+                    bullets.RemoveAt(i)
+                    enemies.RemoveAt(j)
+
+                    score += 10
+                    lblScore.Text = "Score: " & score
+
+                    Exit For
+
+                End If
+
+            Next
+
+        Next
+
+    End Sub
+
+End Class
